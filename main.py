@@ -109,9 +109,17 @@ def main():
         logging.critical(e)
         return
 
+    last_mail_day = None
     while True:
         now = datetime.now()
-        open_today, close_today = OPEN_HOURS[now.weekday()]
+
+        # For debug purposes
+        # from datetime import timedelta
+        # now -= timedelta(hours=5)
+
+        weekday = now.weekday()
+        open_today, close_today = OPEN_HOURS[weekday]
+
         if (open_today <= now.hour < close_today - 1) or force_send:
             try:
                 response = requests.get(URL)
@@ -128,7 +136,7 @@ def main():
 
             report_data = {}
 
-            send_mail = False
+            should_send_email = False
             for item in menu_items:
                 found = False
                 for check in checklist:
@@ -136,7 +144,7 @@ def main():
                     if check in item_name.lower():
                         logging.debug(f"Item '{item_name}': {item["attributes"]}")
                         if 'SOLD_OUT' not in item["attributes"]:
-                            send_mail = True
+                            should_send_email = True
                             logging.info("Item found, email will be send")
                             report_data[item_name] = "Available"
                         else:
@@ -145,17 +153,15 @@ def main():
                 if not found:
                     report_data[check] = "Not found!"
 
-            if send_mail or force_send:
+            if (should_send_email and (last_mail_day is None or last_mail_day != weekday)) or force_send:
                 msg = prepare_message(report_data)
                 logging.info(f"Sending message:\n{msg}")
-                # send_email(recipient, msg)
+                send_email(recipient, msg)
+                last_mail_day = weekday
             else:
-                logging.info("Not sending email - everything is sold out")
-
-            open_today, close_today = OPEN_HOURS[datetime.now().weekday()]
-            now = datetime.now()
+                logging.info(f"Not sending email, {should_send_email=}, {last_mail_day=}, {weekday=}")
         else:
-            logging.info(f"It's closed, there's no point in checking the menu")
+            logging.info("It's closed, there's no point in checking the menu")
 
         logging.info(f"Going to sleep for {period_h} hour(s)...")
         sleep_hours(period_h)
